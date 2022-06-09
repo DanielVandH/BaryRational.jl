@@ -104,7 +104,7 @@ function aaa(Z::AbstractArray{T,1}, F::AbstractArray{S,1}; tol=1e-13, mmax=100,
     if clean
         pol, res, zer = prz(r)            # poles, residues, and zeros
         ii = cleanup_fnc(res)  # find negligible residues
-        length(ii) != 0 && cleanup!(r, pol, res, zer, Z, F, cleanup_fnc)
+        length(ii) != 0 && cleanup!(r, pol, res, zer, Z, F, cleanup_fnc; verbose)
     end
     return r
 end
@@ -157,7 +157,7 @@ end
 
 # Only calculate the updated z, f, and w
 """
-    cleanup!(r, pol, res, zer, Z, F, cleanup_fnc)
+    cleanup!(r, pol, res, zer, Z, F, cleanup_fnc; verbose = false)
 
 Cleans up the Froissart doublets in the AAA approximant `r`. Operates in-place.
 
@@ -170,21 +170,25 @@ Cleans up the Froissart doublets in the AAA approximant `r`. Operates in-place.
 -` F`: The data values at the corresponding points in `Z`.
 - `cleanup_fnc`: A function which takes in a 
     vector of residues `res` and returns a vector of indices in `res` that should be cleaned.
+
+# Keyword Arguments 
+- `verbose = false`: Whether to print cleanup information.`
 """
-function cleanup!(r, pol, res, zer, Z, F, cleanup_fnc)
+function cleanup!(r, pol, res, zer, Z, F, cleanup_fnc; verbose = false)
     z, f, w = r.x, r.f, r.w
     m = length(z)
     M = length(Z)
     ii = cleanup_fnc(res) # find negligible residues
     ni = length(ii)
     ni == 0 && return
-    println("$ni Froissart doublets. Number of residues = ", length(res))
+    verbose && println("$ni Froissart doublets. Number of residues = ", length(res))
 
     @inbounds for j = 1:ni
         azp = abs.(z .- pol[ii[j]] )
         jj = findall(isequal(minimum(azp)), azp)
         deleteat!(z, jj)    # remove nearest support points
         deleteat!(f, jj)
+        deleteat!(w, jj)
     end    
 
     @inbounds for j = 1:length(z)
@@ -199,6 +203,6 @@ function cleanup!(r, pol, res, zer, Z, F, cleanup_fnc)
     A = SF*C - C*Sf
     G = svd(A)
     w[:] .= G.V[:, m]
-    println("cleanup: ", size(z), "  ", size(f), "  ", size(w))
+    verbose && println("cleanup: ", size(z), "  ", size(f), "  ", size(w))
     return nothing
 end
