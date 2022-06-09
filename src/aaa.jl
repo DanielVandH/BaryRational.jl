@@ -41,14 +41,14 @@ Applies the AAA algorithm to the data `(Z, T)`.
 - `mmax = 100`: Maximum type is `(mmax - 1, mmax - 1)`.
 - `verbose = false`: Print info while calculating.
 - `clean = true`: Detect and remove Froissart doublets.
-- `cleanup_fnc = res -> findall(abs.(res) .< tol)`: A function which takes in a 
-    vector of residues `res` and returns a vector of indices in `res` that should be cleaned.
+- `cleanup_fnc = (pol, res, r) -> findall(abs.(res) .< tol)`: A function which takes in a 
+    vector of residues `res` and poles `pol` and the approximant `r` and returns a vector of indices corresponding to poles that should be cleaned.
 
 # Outputs 
 - `r`: An AAA approximant as a callable struct with fields.
 """
 function aaa(Z::AbstractArray{T,1}, F::AbstractArray{S,1}; tol=1e-13, mmax=100,
-             verbose=false, clean=true, cleanup_fnc = res -> findall(abs.(res) .< tol)) where {S, T}
+             verbose=false, clean=true, cleanup_fnc = (pol, res) -> findall(abs.(res) .< tol)) where {S, T}
     # filter out any NaN's or Inf's in the input
     keep = isfinite.(F)
     F = F[keep]
@@ -103,7 +103,7 @@ function aaa(Z::AbstractArray{T,1}, F::AbstractArray{S,1}; tol=1e-13, mmax=100,
     # remove Frois. doublets if desired.  We do this in place
     if clean
         pol, res, zer = prz(r)            # poles, residues, and zeros
-        ii = cleanup_fnc(res)  # find negligible residues
+        ii = cleanup_fnc(pol, res, r)  # find negligible residues
         length(ii) != 0 && cleanup!(r, pol, res, zer, Z, F, cleanup_fnc; verbose)
     end
     return r
@@ -169,7 +169,7 @@ Cleans up the Froissart doublets in the AAA approximant `r`. Operates in-place.
 - `Z`: The sample points. 
 -` F`: The data values at the corresponding points in `Z`.
 - `cleanup_fnc`: A function which takes in a 
-    vector of residues `res` and returns a vector of indices in `res` that should be cleaned.
+    vector of residues `res`, poles `pol`, and the approximant `r` and returns a vector of indices in `res` that should be cleaned.
 
 # Keyword Arguments 
 - `verbose = false`: Whether to print cleanup information.`
@@ -178,7 +178,7 @@ function cleanup!(r, pol, res, zer, Z, F, cleanup_fnc; verbose = false)
     z, f, w = r.x, r.f, r.w
     m = length(z)
     M = length(Z)
-    ii = cleanup_fnc(res) # find negligible residues
+    ii = cleanup_fnc(pol, res, r) # find negligible residues
     ni = length(ii)
     ni == 0 && return
     verbose && println("$ni Froissart doublets. Number of residues = ", length(res))
