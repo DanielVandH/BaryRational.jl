@@ -2,6 +2,17 @@
 # by Y. Nakatsukasa, O. Sete, and L.N. Trefethen, SIAM Journal on Scientific Computing
 # 2018 
 
+"""
+    AAAapprox{T <: AbstractArray} <: BRInterp
+
+Struct for the [`aaa`](@ref). 
+
+# Fields 
+- `x`: Support points.
+- `f`: Function values at support points. 
+- `w`: Weights. 
+- `errvec`: Vector of errors at each iteration.
+"""
 struct AAAapprox{T <: AbstractArray} <: BRInterp
     x::T
     f::T
@@ -16,28 +27,28 @@ function aaa(Z::AbstractArray{T,1}, F::S;  tol=1e-13, mmax=100, verbose=false, c
     aaa(Z, F.(Z), tol=tol, mmax=mmax, verbose=verbose, clean=clean)
 end
 
-"""aaa  rational approximation of data F on set Z
-        r = aaa(Z, F; tol, mmax, verbose, clean)
+"""
+    aaa(Z::AbstractArray{T, 1}, F::AbstractArray{S, 1}; <keyword arguments>)
 
- Input: Z = vector of sample points
-        F = vector of data values at the points in Z
-        tol = relative tolerance tol, set to 1e-13 if omitted
-        mmax: max type is (mmax-1, mmax-1), set to 100 if omitted
-        verbose: print info while calculating default = false
-        clean: detect and remove Froissart doublets default = true
+Applies the AAA algorithm to the data `(Z, T)`.
 
- Output: r = an AAA approximant as a callable struct with fields
-         z, f, w = vectors of support pts, function values, weights
-         errvec = vector of errors at each step
+# Arguments 
+- `Z::AbstractArray{T,1}`: Vector of sample points.
+- `F::AbstractArray{S, 1}`: Vector of data values at the corresponding points in `Z`.
 
- NOTE: changes from matlab version:
-         switched order of Z and F in function signature
-         added verbose and clean boolean flags
-         pol, res, zer = vectors of poles, residues, zeros are now only calculated on demand
-         by calling prz(z::AAAapprox)
+# Keyword Arguments 
+- `tol = 1e-13`: Relative tolerance.
+- `mmax = 100`: Maximum type is `(mmax - 1, mmax - 1)`.
+- `verbose = false`: Print info while calculating.
+- `clean = true`: Detect and remove Froissart doublets.
+- `cleanup_fnc = res -> findall(abs.(res) .< tol)`: A function which takes in a 
+    vector of residues `res` and returns a vector of indices in `res` that should be cleaned.
+
+# Outputs 
+- `r`: An AAA approximant as a callable struct with fields.
 """
 function aaa(Z::AbstractArray{T,1}, F::AbstractArray{S,1}; tol=1e-13, mmax=100,
-             verbose=false, clean=true) where {S, T}
+             verbose=false, clean=true, cleanup_fnc = res -> findall(abs.(res) .< tol)) where {S, T}
     # filter out any NaN's or Inf's in the input
     keep = isfinite.(F)
     F = F[keep]
@@ -92,13 +103,17 @@ function aaa(Z::AbstractArray{T,1}, F::AbstractArray{S,1}; tol=1e-13, mmax=100,
     # remove Frois. doublets if desired.  We do this in place
     if clean
         pol, res, zer = prz(r)            # poles, residues, and zeros
-        ii = findall(abs.(res) .< 1e-13)  # find negligible residues
-        length(ii) != 0 && cleanup!(r, pol, res, zer, Z, F)
+        ii = cleanup_fnc(res)  # find negligible residues
+        length(ii) != 0 && cleanup!(r, pol, res, zer, Z, F, cleanup_fnc)
     end
     return r
 end
 
+"""
+    prz(r::AAAapprox)
 
+Returns the poles, residues, and zeros for the AAA approximant `r`.
+"""
 function prz(r::AAAapprox)
     z, f, w = r.x, r.f, r.w        
     m = length(w)
@@ -118,7 +133,11 @@ function prz(r::AAAapprox)
     pol, res, zer
 end
 
+"""
+    reval(zz, z, f, w)
 
+Evaluates the AAA approximant at `zz`.
+"""
 function reval(zz, z, f, w)
     # evaluate r at zz
     zv = size(zz) == () ? [zz] : vec(zz)  
@@ -137,11 +156,26 @@ end
 
 
 # Only calculate the updated z, f, and w
-function cleanup!(r, pol, res, zer, Z, F)
+"""
+    cleanup!(r, pol, res, zer, Z, F, cleanup_fnc)
+
+Cleans up the Froissart doublets in the AAA approximant `r`. Operates in-place.
+
+# Arguments 
+- `r`: The AAA approximant.
+- `pol`: Poles of `r`.
+- `res`: Residues for the poles in `pol`.
+- `zer`: Zeros of `r`.
+- `Z`: The sample points. 
+-` F`: The data values at the corresponding points in `Z`.
+- `cleanup_fnc`: A function which takes in a 
+    vector of residues `res` and returns a vector of indices in `res` that should be cleaned.
+"""
+function cleanup!(r, pol, res, zer, Z, F, cleanup_fnc)
     z, f, w = r.x, r.f, r.w
     m = length(z)
     M = length(Z)
-    ii = findall(abs.(res) .< 1e-13)  # find negligible residues
+    ii = cleanup_fnc(res) # find negligible residues
     ni = length(ii)
     ni == 0 && return
     println("$ni Froissart doublets. Number of residues = ", length(res))
